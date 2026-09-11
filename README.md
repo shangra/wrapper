@@ -32,7 +32,7 @@ wrapper/
 }
 ```
 
-Сервис подключается по пути `../../{servicePathArray}/{serviceName}`, создаётся экземпляр с `constructorArgumentsList` и вызывается `functionName(...functionArgumentsList)`.
+Сервис ищется локально: сначала в реестре `services[module].services[name]`, затем абсолютным `require` от корня приложения (`process.cwd()`, `modules/`, `src/`, `__dirname`), а не относительным путём `../..` от текущего файла — иначе после сборки в `dist-temp/bundle.js` Node ищет `auth` рядом с бандлом.
 
 ## Использование Proxy
 
@@ -42,7 +42,7 @@ const instance = new LocalService(...constructorArgs);
 const result = await instance.someMethod(...methodArgs);
 ```
 
-Вызов всегда идёт через локальный `post()`. Если модуля нет на диске, `require` выбросит ошибку.
+Вызов всегда идёт через локальный `post()`. Если класса нет в реестре и файла нет ни в одном из корней поиска, будет ошибка `Сервис не найден` со списком проверенных путей (`error.tried`).
 
 ## Тесты
 

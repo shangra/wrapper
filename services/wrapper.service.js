@@ -1,16 +1,87 @@
 const path = require('node:path');
-const Extensions = require('../../../../core/class/Extensions.class');
+const Extensions = require('../../../core/class/Extensions.class');
 
 class wrapperService extends Extensions {
+    getSearchRoots() {
+        const roots = [];
+        const add = (dir) => {
+            if (!dir || typeof dir !== 'string') {
+                return;
+            }
+            const resolved = path.resolve(dir);
+            if (!roots.includes(resolved)) {
+                roots.push(resolved);
+            }
+        };
+
+        // Исходная раскладка: wrapper/services → соседние модули (auth, …)
+        add(path.join(__dirname, '..', '..'));
+        add(path.join(__dirname, '..'));
+
+        // Бандл (dist-temp/bundle.js): модули лежат от cwd / корня приложения
+        add(process.cwd());
+        add(path.join(process.cwd(), 'modules'));
+        add(path.join(process.cwd(), 'src'));
+        if (require.main?.filename) {
+            add(path.dirname(require.main.filename));
+            add(path.join(path.dirname(require.main.filename), '..'));
+        }
+
+        if (typeof sreda !== 'undefined' && sreda.env) {
+            add(sreda.env.SR_PATH);
+            add(sreda.env.ROOT);
+            add(sreda.env.APP_ROOT);
+            add(sreda.env.MODULES_PATH);
+        }
+
+        return roots;
+    }
+
+    resolveLocalPath(servicePathArray, serviceName) {
+        const names = [serviceName];
+        if (serviceName.endsWith('.service')) {
+            names.push(`${serviceName}.js`);
+        }
+
+        const tried = [];
+        for (const root of this.getSearchRoots()) {
+            for (const name of names) {
+                const candidate = path.resolve(root, ...servicePathArray, name);
+                tried.push(candidate);
+                try {
+                    return require.resolve(candidate);
+                } catch (e) {
+                    // пробуем следующий корень
+                }
+            }
+        }
+
+        const error = new Error(
+            `Сервис не найден: ${servicePathArray.join('/')}/${serviceName}`
+        );
+        error.tried = tried;
+        throw error;
+    }
+
+    loadLocalClass(servicePathArray, serviceName) {
+        const ext = servicePathArray[0];
+        const registry =
+            typeof services !== 'undefined' ? services : globalThis.services;
+        const byFile = registry?.[ext]?.services?.[serviceName];
+        const byName =
+            registry?.[ext]?.services?.[path.parse(serviceName).name];
+        if (typeof byFile === 'function') {
+            return byFile;
+        }
+        if (typeof byName === 'function') {
+            return byName;
+        }
+        return require(this.resolveLocalPath(servicePathArray, serviceName));
+    }
+
     async findService(servicePathArray, serviceName) {
         try {
-            const localPath = path.join(
-                '..',
-                '..',
-                ...servicePathArray,
-                serviceName
-            );
-            require(localPath);
+            this.resolveLocalPath(servicePathArray, serviceName);
             return true;
         } catch (e) {
             return false;
@@ -49,13 +120,10 @@ class wrapperService extends Extensions {
     }
 
     async post(from, service, body) {
-        const localPath = path.join(
-            '..',
-            '..',
-            ...body.servicePathArray,
+        const moduleClass = this.loadLocalClass(
+            body.servicePathArray,
             body.serviceName
         );
-        const moduleClass = require(localPath);
         const moduleInstance = new moduleClass(
             ...body.constructorArgumentsList
         );
