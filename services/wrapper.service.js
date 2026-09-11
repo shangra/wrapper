@@ -1,3 +1,4 @@
+const fs = require('node:fs');
 const path = require('node:path');
 const Extensions = require('../../../core/class/Extensions.class');
 
@@ -14,18 +15,31 @@ class wrapperService extends Extensions {
             }
         };
 
-        // Исходная раскладка: wrapper/services → соседние модули (auth, …)
+        const starts = [process.cwd(), __dirname];
+        if (require.main?.filename) {
+            starts.push(path.dirname(require.main.filename));
+        }
+
+        // В sreda-pivot модули лежат в ext_modules/auth, не в auth/ у корня
+        for (const start of starts) {
+            let dir = path.resolve(start);
+            for (let i = 0; i < 8; i++) {
+                const extModules = path.join(dir, 'ext_modules');
+                if (fs.existsSync(extModules)) {
+                    add(extModules);
+                }
+                const parent = path.dirname(dir);
+                if (parent === dir) {
+                    break;
+                }
+                dir = parent;
+            }
+        }
+
+        // Исходная раскладка без бандла: wrapper/services → соседние модули
         add(path.join(__dirname, '..', '..'));
         add(path.join(__dirname, '..'));
-
-        // Бандл (dist-temp/bundle.js): модули лежат от cwd / корня приложения
         add(process.cwd());
-        add(path.join(process.cwd(), 'modules'));
-        add(path.join(process.cwd(), 'src'));
-        if (require.main?.filename) {
-            add(path.dirname(require.main.filename));
-            add(path.join(path.dirname(require.main.filename), '..'));
-        }
 
         if (typeof sreda !== 'undefined' && sreda.env) {
             add(sreda.env.SR_PATH);
