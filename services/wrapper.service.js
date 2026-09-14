@@ -90,10 +90,24 @@ class wrapperService extends Extensions {
         if (typeof byName === 'function') {
             return byName;
         }
+        const embedded = Extensions.lookupEmbeddedService(
+            servicePathArray,
+            serviceName
+        );
+        if (typeof embedded === 'function') {
+            return embedded;
+        }
         return require(this.resolveLocalPath(servicePathArray, serviceName));
     }
 
     async findService(servicePathArray, serviceName) {
+        const embedded = Extensions.lookupEmbeddedService(
+            servicePathArray,
+            serviceName
+        );
+        if (typeof embedded === 'function') {
+            return true;
+        }
         try {
             this.resolveLocalPath(servicePathArray, serviceName);
             return true;
